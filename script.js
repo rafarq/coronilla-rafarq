@@ -212,7 +212,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentCardIndex === FINAL_INDEX) {
             renderThanksCard();
         } else {
-            const title = cards[0] ? cards[0].querySelector('.card-title').textContent : '';
+            const top = cards[0];
+            const title = top ? (top.dataset.title || top.querySelector('.card-title')?.textContent || '') : '';
             announce(`Tarjeta ${currentCardIndex + 1} de ${totalCards}: ${title}`);
         }
         updateProgress();

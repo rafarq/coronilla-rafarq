@@ -48,11 +48,19 @@ foreach ($cards as $i => $card) {
     $body = htmlspecialchars($card['body'], ENT_QUOTES, 'UTF-8');
     $title = htmlspecialchars($card['title'], ENT_QUOTES, 'UTF-8');
     $dataDecena = $decena !== null ? ' data-decena="' . $decena . '"' : '';
-    $badge = $m['type'] !== 'apertura' ? '<span class="card-badge" data-type="' . $m['type'] . '">' . $m['label'] . '</span>' : '';
-    $rendered .= '<article class="card" data-index="' . $i . '" data-type="' . $m['type'] . '"' . $dataDecena . ' tabindex="0" role="group" aria-label="Tarjeta ' . ($i + 1) . ': ' . $title . '">'
+
+    // Los Granos (mayor y menor) no muestran chip ni título: son repetitivos
+    // y la oración es el único contenido útil. Solo se conserva el nombre en
+    // el aria-label y en data-title para anuncios accesibles.
+    $isGrano = $m['type'] === 'grano_mayor' || $m['type'] === 'grano_menor';
+    $badge = (!$isGrano && $m['type'] !== 'apertura') ? '<span class="card-badge" data-type="' . $m['type'] . '">' . $m['label'] . '</span>' : '';
+    $heading = $isGrano ? '' : '<h2 class="card-title">' . $title . '</h2>';
+    $bodyClass = $isGrano ? 'card-body card-body-only' : 'card-body';
+
+    $rendered .= '<article class="card" data-index="' . $i . '" data-type="' . $m['type'] . '" data-title="' . $title . '"' . $dataDecena . ' tabindex="0" role="group" aria-label="Tarjeta ' . ($i + 1) . ': ' . $title . '">'
         . $badge
-        . '<h2 class="card-title">' . $title . '</h2>'
-        . '<p class="card-body">' . nl2br($body) . '</p>'
+        . $heading
+        . '<p class="' . $bodyClass . '">' . nl2br($body) . '</p>'
         . '</article>' . "\n";
 }
 ?>
@@ -255,6 +263,21 @@ foreach ($cards as $i => $card) {
         .card[data-type="grano_menor"] .card-title { font-size: 1.25rem; letter-spacing: 0.05em; text-transform: uppercase; }
         .card[data-type="grano_mayor"] .card-title { color: var(--gold); }
         .card[data-type="grano_menor"] .card-body { font-size: 1.15rem; font-style: italic; }
+
+        /* Granos sin chip ni título: la oración ocupa todo el protagonismo. */
+        .card[data-type="grano_mayor"].card,
+        .card[data-type="grano_menor"].card {
+            justify-content: center;
+        }
+        .card[data-type="grano_mayor"] .card-body-only {
+            font-size: 1.45rem;
+            font-weight: 500;
+            line-height: 1.55;
+        }
+        .card[data-type="grano_menor"] .card-body-only {
+            font-size: 1.35rem;
+            font-style: italic;
+        }
 
         /* Tarjeta final / gracias */
         .thanks-title { font-family: var(--serif); font-size: 2rem; color: var(--accent); margin: 0 0 0.75rem; }
