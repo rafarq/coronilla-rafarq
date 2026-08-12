@@ -1,15 +1,25 @@
 # Coronilla de la Divina Misericordia
 
-Aplicación web instalable para rezar la Coronilla mediante tarjetas y gestos.
+Aplicación web instalable (PWA) para rezar la Coronilla mediante tarjetas, gestos, botones y teclado.
 
 ## Estructura
 
-- `index.php`: interfaz y las 64 tarjetas.
-- `cards.json`: fuente de datos de las tarjetas.
-- `script.js`: navegación por gestos, progreso y contador.
-- `counter.php`: endpoint local equivalente al endpoint remoto; persiste el contador en `data/counter.sqlite`.
-- `sw.js`: service worker offline.
+- `index.php`: interfaz; genera las 64 tarjetas desde `cards.json`.
+- `cards.json`: fuente única de datos de las tarjetas.
+- `script.js`: navegación (gestos, botones, teclado), progreso, persistencia y contador.
+- `counter.php`: endpoint del contador; persiste en `data/counter.sqlite`.
+- `sw.js`: service worker offline (red primero para navegación, caché para el resto).
 - `manifest.json`, `icons/`, `icon.png`: instalación PWA.
+
+## Funcionalidades
+
+- 64 tarjetas con gestos (swipe), botones `Anterior`/`Siguiente`, índice por pasos y teclado (← →, Inicio, Fin).
+- Distinción entre desplazamiento vertical (lectura de tarjeta larga) y swipe horizontal (avanzar/retroceder).
+- Progreso guardado en `localStorage` para continuar donde se dejó.
+- Indicador de decena (`Decena 3 de 5`).
+- Accesibilidad: `aria-live`, foco visible, `role` adecuado y `prefers-reduced-motion`.
+- Pantalla final con contador de personas, reinicio, instalación PWA y compartir.
+- Diseño responsive con `100dvh` y `safe-area-inset`.
 
 ## Desarrollo
 
@@ -30,13 +40,24 @@ node --check script.js
 python3 tests/smoke.py
 ```
 
-El `index.html` descargado inicialmente no forma parte del sitio: era la página 404 de Hostinger devuelta para esa ruta. La aplicación real se sirve en `/` y `/index.php`.
+El `index.html` descargado inicialmente no forma parte del sitio: era la página 404 de Hostinger. La aplicación real se sirve en `/` y `/index.php`.
 
-## Bugs corregidos
+## Bugs corregidos (importación)
 
-- Se eliminó del repositorio el falso `index.html` 404.
-- Se evitó que varios gestos rápidos se solapen durante la animación y corrompan la pila de tarjetas.
-- Se validan las respuestas HTTP/JSON del incremento del contador.
-- Se hizo autocontenido el service worker: ya no depende de recursos externos que pueden provocar el fallo de `cache.addAll()`.
-- Se añade limpieza de cachés antiguas y activación inmediata del service worker.
+- Se eliminó el falso `index.html` 404 del mirror.
+- Se evitó que varios gestos rápidos se solaparan durante la animación y corrompieran la pila.
+- Se validan las respuestas HTTP/JSON del contador.
+- Service worker autocontenido (sin recursos externos que rompían `cache.addAll()`), con limpieza de cachés antiguas, `skipWaiting()` y `clients.claim()`.
 - El contador local valida método, payload y errores de persistencia.
+- Las tarjetas se generan desde `cards.json` (fuente única), eliminando la duplicación HTML/JSON.
+
+## Mejoras aplicadas
+
+- Estética contemplativa: fondo marfil, azul profundo y dorado, serif para la oración.
+- Jerarquía visual por tipo de tarjeta (Grano mayor/menor, Invocación, etc.).
+- Botones de navegación visibles y menú de índice por pasos.
+- Persistencia del progreso.
+- Pantalla final con contador, reinicio, instalar y compartir.
+- PWA completa con estrategia de caché versionada.
+- Responsive (`100dvh`).
+- Privacidad: sin analítica externa; el contador es una métrica agregada documentada.

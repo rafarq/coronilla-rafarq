@@ -1,99 +1,103 @@
 document.addEventListener('DOMContentLoaded', () => {
     const stack = document.getElementById('stack');
+    const progressBar = document.getElementById('progress-bar');
+    const progressTrack = document.querySelector('.progress-track');
+    const progressMarkers = document.getElementById('progress-markers');
+    const decenaIndicator = document.getElementById('decena-indicator');
+    const liveRegion = document.getElementById('live-region');
+    const menuOverlay = document.getElementById('menu-overlay');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnMenu = document.getElementById('btn-menu');
+    const btnRestart = document.getElementById('btn-restart');
+    const STORAGE_KEY = 'coronilla-position-v3';
+
     let cards = Array.from(document.querySelectorAll('.card'));
-    let startX = 0;
-    let startY = 0;
-    let currentX = 0;
-    let currentY = 0;
+    const totalCards = cards.length;
+    const finalCard = cards[totalCards - 1];
+    const finalCardMarkup = finalCard ? finalCard.innerHTML : '';
+    let currentCardIndex = 0;
+
+    // --- Estado de gestos ---
+    let startX = 0, startY = 0, currentX = 0, currentY = 0;
     let startTime = 0;
     let isDragging = false;
     let isAnimating = false;
-    const threshold = 100; // Minimum distance to trigger swipe
+    let swipeAxis = null; // 'x' | 'y' | null
+    const threshold = 80;
 
-    const totalCards = document.querySelectorAll('.card').length;
-    let currentCardIndex = 0;
-    const progressBar = document.getElementById('progress-bar');
-    const progressMarkers = document.getElementById('progress-markers');
-
+    const history = [];
     let hasCounted = false;
 
+    // La Coronilla tiene 64 tarjetas; la última (índice 63) es el final.
+    const FINAL_INDEX = totalCards - 1;
+    const INCREMENT_AT = 60; // se registra una vez al llegar a las invocaciones finales
+
+    // --- Inicialización de marcadores de decena ---
     function initMarkers() {
-        const allCards = document.querySelectorAll('.card');
-        allCards.forEach((card, index) => {
-            const title = card.querySelector('h2').textContent;
-            // Check for Grano Mayor or specific ID 60 (Invocación 1)
-            // Note: ID is not directly on the card element as an attribute in the PHP loop, 
-            // but we can infer it or check the title/index if we know the order.
-            // Better to check the data-index or just the title/content if unique enough.
-            // The user said "card with id 60". In the JSON, id 60 is "Invocación 1".
-            // Let's check the data-index from the PHP loop.
-
-            const cardId = parseInt(card.getAttribute('data-index')) + 1; // data-index is 0-based from array
-            // The JSON IDs match the 1-based index mostly, but let's rely on the JSON content if possible.
-            // Actually, the PHP loop uses the array index as data-index.
-            // Let's assume the JSON IDs correspond to the order.
-
-            let labelText = '';
-            if (title.includes('Grano Mayor')) {
-                const match = title.match(/(\d+)$/);
-                labelText = match ? `G${match[1]}` : 'GM';
-            } else if (cardId === 60) {
-                labelText = 'F';
-            }
-
-            if (labelText) {
-                const position = (index / (totalCards - 1)) * 100;
-                const marker = document.createElement('div');
-                // Base classes
-                marker.className = 'marker absolute top-1/2 -translate-y-1/2 w-1 h-3 bg-gray-400 rounded-full transition-colors duration-300';
-                marker.style.left = `${position}%`;
-                marker.dataset.index = index; // Store index for active check
-
-                const label = document.createElement('div');
-                label.className = 'marker-label absolute -top-4 left-1/2 -translate-x-1/2 text-[0.5rem] text-gray-500 font-bold whitespace-nowrap transition-colors duration-300';
-                label.textContent = labelText;
-
-                marker.appendChild(label);
-                progressMarkers.appendChild(marker);
-            }
+        if (!progressMarkers) return;
+        // Marcadores en cada Grano Mayor (índices 4, 15, 26, 37, 48) y en el final.
+        const markerIndexes = [4, 15, 26, 37, 48, FINAL_INDEX];
+        markerIndexes.forEach(idx => {
+            if (idx >= totalCards) return;
+            const position = totalCards > 1 ? (idx / (totalCards - 1)) * 100 : 0;
+            const marker = document.createElement('div');
+            marker.className = 'marker';
+            marker.style.left = `${position}%`;
+            marker.dataset.index = String(idx);
+            const label = document.createElement('span');
+            label.className = 'marker-label';
+            label.textContent = idx === FINAL_INDEX ? 'Fin' : `D${(idx - 4) / 11 + 1}`;
+            marker.appendChild(label);
+            progressMarkers.appendChild(marker);
         });
+    }
+
+    function announce(text) {
+        if (liveRegion) liveRegion.textContent = text;
     }
 
     function updateProgress() {
         if (!progressBar || totalCards < 2) return;
-        // Calculate progress
-        const progress = ((currentCardIndex) / (totalCards - 1)) * 100;
+        const progress = (currentCardIndex / (totalCards - 1)) * 100;
         progressBar.style.width = `${Math.min(progress, 100)}%`;
+        if (progressTrack) {
+            progressTrack.setAttribute('aria-valuenow', String(Math.round(progress)));
+        }
 
-        // Update markers active state
-        const markers = document.querySelectorAll('.marker');
-        markers.forEach(marker => {
-            const markerIndex = parseInt(marker.dataset.index);
+        document.querySelectorAll('.marker').forEach(marker => {
+            const markerIndex = parseInt(marker.dataset.index, 10);
+            const active = currentCardIndex >= markerIndex;
+            marker.classList.toggle('active', active);
             const label = marker.querySelector('.marker-label');
-
-            if (currentCardIndex >= markerIndex) {
-                marker.classList.remove('bg-gray-400');
-                marker.classList.add('bg-blue-600');
-
-                label.classList.remove('text-gray-500');
-                label.classList.add('text-blue-600');
-            } else {
-                marker.classList.add('bg-gray-400');
-                marker.classList.remove('bg-blue-600');
-
-                label.classList.add('text-gray-500');
-                label.classList.remove('text-blue-600');
-            }
+            if (label) label.classList.toggle('active', active);
         });
 
-        // Trigger counter at 95% (approx index 60 out of 64)
-        if (currentCardIndex >= 60 && !hasCounted) {
+        // Indicador de decena
+        if (decenaIndicator) {
+            const card = cards[0];
+            const decena = card ? card.dataset.decena : null;
+            if (decena) {
+                decenaIndicator.innerHTML = `Decena <strong>${decena}</strong> de 5`;
+            } else if (currentCardIndex === FINAL_INDEX) {
+                decenaIndicator.textContent = '';
+            } else if (currentCardIndex <= 3) {
+                decenaIndicator.textContent = 'Preparación';
+            } else if (currentCardIndex >= 59 && currentCardIndex <= 61) {
+                decenaIndicator.textContent = 'Invocaciones';
+            } else if (currentCardIndex === 62) {
+                decenaIndicator.textContent = 'Oración conclusión';
+            } else {
+                decenaIndicator.textContent = '';
+            }
+        }
+
+        // Registrar el rezo una sola vez al llegar a las invocaciones finales.
+        if (currentCardIndex >= INCREMENT_AT && !hasCounted) {
             hasCounted = true;
             fetch('counter.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'increment' })
             }).then(response => {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -104,214 +108,377 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateStack() {
+    // --- Persistencia del progreso ---
+    function saveProgress() {
+        try { localStorage.setItem(STORAGE_KEY, String(currentCardIndex)); } catch (e) { /* noop */ }
+    }
+
+    function loadSavedIndex() {
+        try {
+            const saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+            if (!Number.isNaN(saved) && saved > 0 && saved < totalCards) return saved;
+        } catch (e) { /* noop */ }
+        return 0;
+    }
+
+    // --- Navegación ---
+    // Invariante: history.length === currentCardIndex === número de tarjetas
+    // descartadas de la pila. cards[0] es la tarjeta visible actual.
+    function moveTo(index) {
+        if (isAnimating) return;
+        const target = Math.max(0, Math.min(totalCards - 1, index));
+        if (target === currentCardIndex) return;
+
+        if (target > currentCardIndex) {
+            const delta = target - currentCardIndex;
+            for (let i = 0; i < delta; i++) {
+                // Consultar el DOM en cada iteración: la snapshot `cards` no
+                // se actualiza al hacer remove().
+                const card = stack.querySelector('.card');
+                if (!card) break;
+                history.push(card);
+                card.remove();
+            }
+        } else {
+            let steps = currentCardIndex - target;
+            while (steps > 0 && history.length > 0) {
+                const previousCard = history.pop();
+                previousCard.style.display = 'flex';
+                previousCard.style.transition = 'none';
+                stack.prepend(previousCard);
+                steps--;
+            }
+        }
+        currentCardIndex = history.length;
+        refreshState();
+    }
+
+    function nextCard() {
+        if (currentCardIndex < FINAL_INDEX) moveTo(currentCardIndex + 1);
+    }
+
+    function prevCard() {
+        if (currentCardIndex > 0) moveTo(currentCardIndex - 1);
+    }
+
+    function restart() {
+        // Restaurar todas las tarjetas en orden original.
+        while (history.length > 0) {
+            const card = history.pop();
+            card.style.display = 'flex';
+            card.style.transition = 'none';
+            stack.prepend(card);
+        }
+        // La tarjeta final se modifica para la pantalla de agradecimiento.
+        // Recuperar su contenido original al reiniciar.
+        const restoredFinal = stack.querySelector('[data-index="63"]');
+        if (restoredFinal && finalCardMarkup) restoredFinal.innerHTML = finalCardMarkup;
+        currentCardIndex = 0;
+        hasCounted = false;
+        localStorage.removeItem(STORAGE_KEY);
+        refreshState();
+    }
+
+    // --- Render del stack ---
+    function refreshState() {
         cards = Array.from(document.querySelectorAll('.card'));
         cards.forEach((card, index) => {
             card.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
-            card.style.display = 'flex'; // Ensure visible
-
+            card.style.display = 'flex';
             if (index === 0) {
                 card.style.zIndex = 3;
                 card.style.transform = 'scale(1) translateY(0)';
                 card.style.opacity = 1;
-
-                // Check if this is the last card (index 63 in 0-based array of 64 cards)
-                // The card element will have data-index="63"
-                if (card.getAttribute('data-index') === '63') {
-                    fetch('counter.php?action=get')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                const bodyP = card.querySelector('p');
-                                if (bodyP) {
-                                    // Keep original text or replace? User said "muestres el texto XXX personas..."
-                                    // Let's append or replace. The original text is "En el nombre del Padre..."
-                                    // Maybe replace the body or append below it.
-                                    // User request: "en la ultima tarjeta muestres el texto XXX personas rezaron la Coronilla con esta app. Y un botón..."
-
-                                    // Let's clear the current body and add the new content
-                                    card.innerHTML = '';
-
-                                    const h2 = document.createElement('h2');
-                                    h2.className = 'text-2xl font-semibold mb-6 text-center text-gray-900';
-                                    h2.textContent = '¡Gracias!';
-                                    card.appendChild(h2);
-
-                                    const p = document.createElement('p');
-                                    p.className = 'text-lg text-center leading-relaxed text-gray-600 whitespace-pre-line mb-8';
-                                    p.textContent = `${data.count} personas rezaron la Coronilla con esta app.`;
-                                    card.appendChild(p);
-
-                                    const btn = document.createElement('button');
-                                    btn.className = 'bg-blue-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg hover:bg-blue-700 transition-colors';
-                                    btn.textContent = 'Volver a rezar';
-                                    btn.onclick = () => window.location.reload();
-                                    card.appendChild(btn);
-                                }
-                            }
-                        })
-                        .catch(err => console.error('Error fetching count:', err));
-                }
-
+                card.focus({ preventScroll: true });
             } else if (index === 1) {
                 card.style.zIndex = 2;
-                card.style.transform = 'scale(0.95) translateY(10px)';
-                card.style.opacity = 0.4; // Updated transparency
+                card.style.transform = 'scale(0.96) translateY(8px)';
+                card.style.opacity = 0.35;
             } else if (index === 2) {
                 card.style.zIndex = 1;
-                card.style.transform = 'scale(0.9) translateY(20px)';
-                card.style.opacity = 0.2; // Updated transparency
+                card.style.transform = 'scale(0.92) translateY(16px)';
+                card.style.opacity = 0.12;
             } else {
                 card.style.zIndex = 0;
-                card.style.transform = 'scale(0.85) translateY(30px)';
+                card.style.transform = 'scale(0.88) translateY(24px)';
                 card.style.opacity = 0;
-                card.style.display = 'none'; // Hide others for performance
+                card.style.display = 'none';
             }
         });
+
+        btnPrev.disabled = currentCardIndex === 0;
+        btnNext.disabled = currentCardIndex === FINAL_INDEX;
+
+        if (currentCardIndex === FINAL_INDEX) {
+            renderThanksCard();
+        } else {
+            const title = cards[0] ? cards[0].querySelector('.card-title').textContent : '';
+            announce(`Tarjeta ${currentCardIndex + 1} de ${totalCards}: ${title}`);
+        }
         updateProgress();
+        saveProgress();
     }
 
+    // --- Pantalla final ---
+    function renderThanksCard() {
+        const card = cards[0];
+        if (!card) return;
+        card.innerHTML = '';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.justifyContent = 'center';
+
+        const h2 = document.createElement('h2');
+        h2.className = 'thanks-title';
+        h2.textContent = '¡Gracias!';
+        card.appendChild(h2);
+
+        const p = document.createElement('p');
+        p.className = 'thanks-text';
+        p.textContent = 'Has completado la Coronilla. Que la misericordia de Dios te acompañe.';
+        card.appendChild(p);
+
+        const actions = document.createElement('div');
+        actions.className = 'final-actions';
+
+        const countP = document.createElement('p');
+        countP.className = 'thanks-text';
+        countP.id = 'count-text';
+        countP.style.marginBottom = '0.5rem';
+        actions.appendChild(countP);
+
+        const restartBtn = document.createElement('button');
+        restartBtn.className = 'btn btn-primary';
+        restartBtn.textContent = 'Volver a rezar';
+        restartBtn.addEventListener('click', restart);
+        actions.appendChild(restartBtn);
+
+        const installBtn = document.createElement('button');
+        installBtn.className = 'btn btn-ghost';
+        installBtn.id = 'install-btn';
+        installBtn.textContent = 'Instalar aplicación';
+        installBtn.style.display = window.deferredPrompt ? 'inline-flex' : 'none';
+        installBtn.addEventListener('click', async () => {
+            if (window.deferredPrompt) {
+                window.deferredPrompt.prompt();
+                await window.deferredPrompt.userChoice;
+                window.deferredPrompt = null;
+                installBtn.style.display = 'none';
+            }
+        });
+        actions.appendChild(installBtn);
+
+        const shareBtn = document.createElement('button');
+        shareBtn.className = 'btn btn-ghost';
+        shareBtn.textContent = 'Compartir';
+        shareBtn.addEventListener('click', () => {
+            const data = { title: 'Coronilla de la Divina Misericordia', text: 'Reza la Coronilla con esta aplicación', url: window.location.href };
+            if (navigator.share) {
+                navigator.share(data).catch(() => {});
+            } else if (navigator.clipboard) {
+                navigator.clipboard.writeText(window.location.href).then(() => {
+                    shareBtn.textContent = 'Enlace copiado';
+                    setTimeout(() => { shareBtn.textContent = 'Compartir'; }, 2000);
+                });
+            }
+        });
+        actions.appendChild(shareBtn);
+
+        const credit = document.createElement('p');
+        credit.className = 'thanks-text';
+        credit.style.fontSize = '0.75rem';
+        credit.style.color = 'var(--muted)';
+        credit.style.marginTop = '0.5rem';
+        const link = document.createElement('a');
+        link.href = 'https://rafarq.com';
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.style.color = 'var(--accent)';
+        link.textContent = 'rafarq.com';
+        credit.appendChild(document.createTextNode('Hecho con ♥ · '));
+        credit.appendChild(link);
+        actions.appendChild(credit);
+
+        card.appendChild(actions);
+        announce('Has completado la Coronilla. Gracias.');
+        loadCount(countP);
+    }
+
+    function loadCount(countP) {
+        fetch('counter.php?action=get')
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    countP.textContent = `${data.count} personas han rezado la Coronilla con esta aplicación.`;
+                }
+            })
+            .catch(() => {});
+    }
+
+    // --- Instalación PWA ---
+    // Mostrar el botón de instalación cuando el navegador lo permita.
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        const btn = document.getElementById('install-btn');
+        if (btn) btn.style.display = 'inline-flex';
+    });
+
+    // --- Gestos (distinguir scroll vertical de swipe horizontal) ---
     function handleStart(e) {
         if (isAnimating) return;
-        // Ignore clicks on buttons or interactive elements if any (none for now)
-        // Allow button clicks on the last card
         if (e.target.closest && e.target.closest('button, a, input, textarea, select')) return;
 
         startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
         startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
         currentX = startX;
         currentY = startY;
-        startTime = new Date().getTime();
+        startTime = Date.now();
         isDragging = true;
-
-        // Target the top card
+        swipeAxis = null;
         cards = Array.from(document.querySelectorAll('.card'));
-        if (cards.length > 0) {
-            const card = cards[0];
-            card.style.transition = 'none';
-        }
+        if (cards[0]) cards[0].style.transition = 'none';
     }
-
-    const history = []; // Stack to store removed cards
 
     function handleMove(e) {
         if (!isDragging) return;
-
-        // Prevent default scrolling
-        if (e.cancelable) e.preventDefault();
-
-        // Target the top card
         cards = Array.from(document.querySelectorAll('.card'));
-        if (cards.length === 0 && history.length === 0) return; // No cards and no history
-
+        if (cards.length === 0) return;
         const card = cards[0];
 
         currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
         currentY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
         const diffX = currentX - startX;
+        const diffY = currentY - startY;
 
-        // Swipe Right (Next Card)
-        if (diffX > 0 && card) {
-            const rotate = diffX * 0.05;
-            card.style.transform = `translateX(${diffX}px) rotate(${rotate}deg)`;
-            card.style.opacity = 1 - (diffX / 500);
+        // Determinar el eje dominante una sola vez.
+        if (!swipeAxis) {
+            if (Math.abs(diffX) > 12 || Math.abs(diffY) > 12) {
+                swipeAxis = Math.abs(diffX) > Math.abs(diffY) ? 'x' : 'y';
+            }
         }
-        // Swipe Left (Previous Card) - Only if there is history
-        else if (diffX < 0 && history.length > 0) {
-            // We don't move the current card, we might want to show a hint of the previous card coming back?
-            // Or we just detect the swipe left to trigger the restore.
-            // Let's keep it simple: if swipe left > threshold, restore.
-            // Visual feedback for left swipe is tricky without the card being there.
-            // Maybe we can just track the swipe and trigger on end.
-        }
+
+        // Si es vertical (lectura) dejamos scroll nativo y no interferimos.
+        if (swipeAxis !== 'x') return;
+
+        // Si es horizontal pero la tarjeta no está al final del scroll, priorizar la lectura.
+        const isScrollable = card.scrollHeight > card.clientHeight + 4;
+        if (isScrollable && card.scrollTop + card.clientHeight < card.scrollHeight - 8 && diffY !== 0) return;
+
+        if (e.cancelable) e.preventDefault();
+        const rotate = diffX * 0.05;
+        card.style.transform = `translateX(${diffX}px) rotate(${rotate}deg)`;
+        card.style.opacity = Math.max(0, 1 - (Math.abs(diffX) / 500));
     }
 
-    function handleEnd(e) {
-        if (!isDragging || isAnimating) return;
+    function handleEnd() {
+        if (!isDragging) return;
         isDragging = false;
+        const wasAxis = swipeAxis;
+        swipeAxis = null;
 
         cards = Array.from(document.querySelectorAll('.card'));
         const card = cards[0];
         const diffX = currentX - startX;
-
         const diffY = currentY - startY;
-        const timeDiff = new Date().getTime() - startTime;
+        const timeDiff = Date.now() - startTime;
 
-        // Tap detection
-        if (Math.abs(diffX) < 10 && Math.abs(diffY) < 10 && timeDiff < 300) {
-            if (card.scrollHeight > card.clientHeight) {
-                // Check if we are at the bottom
+        // Tap para desplazarse dentro de la tarjeta.
+        if (wasAxis !== 'x' && Math.abs(diffX) < 10 && Math.abs(diffY) < 10 && timeDiff < 300) {
+            if (card && card.scrollHeight > card.clientHeight) {
                 if (card.scrollTop + card.clientHeight >= card.scrollHeight - 10) {
                     card.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
-                    // Scroll down by approx 4 lines (assuming ~30px per line -> 120px)
-                    card.scrollBy({ top: 120, behavior: 'smooth' });
+                    card.scrollBy({ top: 140, behavior: 'smooth' });
                 }
             }
+            startX = 0; currentX = 0;
             return;
         }
 
-        // Swipe Right (Next)
-        if (diffX > threshold && card) {
+        // Swipe derecho: siguiente.
+        if (wasAxis === 'x' && diffX > threshold && card) {
             isAnimating = true;
             card.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
             card.style.transform = `translateX(100vw) rotate(20deg)`;
             card.style.opacity = 0;
-
             setTimeout(() => {
-                history.push(card); // Save to history
-                card.remove(); // Remove from DOM
-                currentCardIndex++;
-                updateStack();
+                nextCard();
                 isAnimating = false;
-            }, 300);
+            }, 280);
         }
-        // Swipe Left (Back)
-        else if (diffX < -threshold && history.length > 0) {
-            const previousCard = history.pop();
-            const stack = document.getElementById('stack');
-
-            // Reset styles for re-entry
-            previousCard.style.transition = 'none';
-            previousCard.style.transform = 'translateX(100vw) rotate(20deg)';
-            previousCard.style.opacity = '0';
-            previousCard.style.display = 'flex';
-
-            stack.prepend(previousCard); // Add back to top of stack
-
-            // Trigger reflow
-            void previousCard.offsetWidth;
-
-            // Animate in
-            previousCard.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
-            previousCard.style.transform = 'scale(1) translateY(0)';
-            previousCard.style.opacity = '1';
-
-            currentCardIndex--;
-            updateStack();
+        // Swipe izquierdo: anterior.
+        else if (wasAxis === 'x' && diffX < -threshold && history.length > 0) {
+            prevCard();
         }
-        // Revert (Not enough swipe)
+        // Revertir.
         else if (card) {
             card.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out';
             card.style.transform = 'scale(1) translateY(0)';
             card.style.opacity = 1;
         }
 
-        // Reset values
-        startX = 0;
-        currentX = 0;
+        startX = 0; currentX = 0;
     }
 
-    // Global listeners
-    document.addEventListener('touchstart', handleStart);
-    document.addEventListener('touchmove', handleMove, { passive: false }); // Passive false for preventDefault
-    document.addEventListener('touchend', handleEnd);
+    // --- Eventos ---
+    document.addEventListener('touchstart', handleStart, { passive: true });
+    document.addEventListener('touchmove', handleMove, { passive: false });
+    document.addEventListener('touchend', handleEnd, { passive: true });
 
     document.addEventListener('mousedown', handleStart);
     document.addEventListener('mousemove', handleMove);
     document.addEventListener('mouseup', handleEnd);
 
-    // Initialize
+    btnNext.addEventListener('click', nextCard);
+    btnPrev.addEventListener('click', prevCard);
+    btnRestart.addEventListener('click', () => { closeMenu(); restart(); });
+
+    document.addEventListener('keydown', (e) => {
+        if (menuOverlay.classList.contains('open')) {
+            if (e.key === 'Escape') closeMenu();
+            return;
+        }
+        if (e.key === 'ArrowRight') { e.preventDefault(); nextCard(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); prevCard(); }
+        else if (e.key === 'Home') { e.preventDefault(); moveTo(0); }
+        else if (e.key === 'End') { e.preventDefault(); moveTo(FINAL_INDEX); }
+    });
+
+    // --- Menú de índice ---
+    function openMenu() {
+        menuOverlay.classList.add('open');
+        menuOverlay.querySelector('button').focus();
+    }
+    function closeMenu() {
+        menuOverlay.classList.remove('open');
+        btnMenu.focus();
+    }
+    btnMenu.addEventListener('click', openMenu);
+    menuOverlay.addEventListener('click', (e) => {
+        if (e.target === menuOverlay) closeMenu();
+    });
+    menuOverlay.querySelectorAll('.menu-item').forEach(item => {
+        item.addEventListener('click', () => {
+            moveTo(parseInt(item.dataset.jump, 10));
+            closeMenu();
+        });
+    });
+    document.querySelectorAll('.jump-row button').forEach(btn => {
+        btn.addEventListener('click', () => moveTo(parseInt(btn.dataset.jump, 10)));
+    });
+
+    // --- Arranque ---
     initMarkers();
-    updateStack();
+
+    // Restaurar posición guardada (o comenzar de cero).
+    const saved = loadSavedIndex();
+    if (saved > 0) {
+        // Reconstruir el estado para llegar a la tarjeta guardada.
+        moveTo(saved);
+    }
+    refreshState();
 });
