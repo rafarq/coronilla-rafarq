@@ -21,7 +21,7 @@ FTP_HOST = "iapremium.rafarq.com"
 FTP_PORT = 21
 REMOTE_DIR = "/domains/coronilla.rafarq.com/public_html"
 SKIP_DIRS = {".git", "__pycache__", "tests", "data"}
-SKIP_FILES = {".DS_Store", ".gitignore", "README.md", "subir.sh"}
+SKIP_FILES = {".DS_Store", ".gitignore", "README.md", "count.txt", "subir.sh"}
 RUNTIME_PREFIXES = ("data/",)
 
 
