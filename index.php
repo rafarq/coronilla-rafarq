@@ -49,13 +49,24 @@ foreach ($cards as $i => $card) {
     $title = htmlspecialchars($card['title'], ENT_QUOTES, 'UTF-8');
     $dataDecena = $decena !== null ? ' data-decena="' . $decena . '"' : '';
 
-    // Los Granos (mayor y menor) no muestran chip ni título: son repetitivos
-    // y la oración es el único contenido útil. Solo se conserva el nombre en
-    // el aria-label y en data-title para anuncios accesibles.
+    // Granos: en los Mayores se muestra el título (Grano Mayor N); en los
+    // Menores solo el chip (GRANO MENOR). Nunca los dos a la vez.
     $isGrano = $m['type'] === 'grano_mayor' || $m['type'] === 'grano_menor';
-    $badge = (!$isGrano && $m['type'] !== 'apertura') ? '<span class="card-badge" data-type="' . $m['type'] . '">' . $m['label'] . '</span>' : '';
-    $heading = $isGrano ? '' : '<h2 class="card-title">' . $title . '</h2>';
-    $bodyClass = $isGrano ? 'card-body card-body-only' : 'card-body';
+    $isGranoMenor = $m['type'] === 'grano_menor';
+    $badge = '';
+    $heading = '';
+    $bodyClass = 'card-body';
+    if ($isGrano) {
+        $bodyClass = 'card-body card-body-only';
+        if ($isGranoMenor) {
+            $badge = '<span class="card-badge" data-type="' . $m['type'] . '">' . $m['label'] . '</span>';
+        } else {
+            $heading = '<h2 class="card-title">' . $title . '</h2>';
+        }
+    } elseif ($m['type'] !== 'apertura') {
+        $badge = '<span class="card-badge" data-type="' . $m['type'] . '">' . $m['label'] . '</span>';
+        $heading = '<h2 class="card-title">' . $title . '</h2>';
+    }
 
     $rendered .= '<article class="card" data-index="' . $i . '" data-type="' . $m['type'] . '" data-title="' . $title . '"' . $dataDecena . ' tabindex="0" role="group" aria-label="Tarjeta ' . ($i + 1) . ': ' . $title . '">'
         . $badge
