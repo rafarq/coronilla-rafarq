@@ -60,7 +60,8 @@ foreach ($cards as $i => $card) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Coronilla de la Divina Misericordia</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#f7f4ee">
@@ -100,6 +101,8 @@ foreach ($cards as $i => $card) {
             overscroll-behavior: none;
             user-select: none;
             -webkit-user-select: none;
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
         }
         header.app-header {
             flex: 0 0 auto;
@@ -206,6 +209,7 @@ foreach ($cards as $i => $card) {
             scrollbar-color: #cfc7b6 transparent;
             transition: transform 0.3s ease-out, opacity 0.3s ease-out;
             will-change: transform, opacity;
+            touch-action: pan-y;
         }
         .card::-webkit-scrollbar { width: 5px; }
         .card::-webkit-scrollbar-thumb { background: #cfc7b6; border-radius: 8px; }
