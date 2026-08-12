@@ -31,6 +31,20 @@ php -S 127.0.0.1:8765 -t .
 
 Abrir <http://127.0.0.1:8765/>.
 
+## Despliegue
+
+Las credenciales FTPS se leen desde `~/.netrc`. El script no sube `.git`,
+`tests`, `data/`, `README.md`, `.gitignore` ni el propio script.
+
+```bash
+./subir.sh --dry-run
+./subir.sh
+```
+
+Destino configurado: `/domains/coronilla.rafarq.com/public_html/`.
+El archivo remoto `count.txt` no se sobrescribe, por lo que se conserva el
+contador de producción.
+
 ## Comprobaciones
 
 ```bash
