@@ -1,3 +1,6 @@
 data/
 .DS_Store
 *.log
+
+# Contador de visitas (estado runtime)
+count.txt
